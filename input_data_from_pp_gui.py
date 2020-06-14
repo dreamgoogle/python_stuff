@@ -9,7 +9,7 @@ WIDTH = 700
 import tkinter as tk
 from tkinter import *
 root = tk.Tk()
-root.wm_title("Collect Inputs")
+root.wm_title("Collect Inputs_V_1.0")
 include = "#include"
 action = "ACTION_"
 decl = "extern"
@@ -39,7 +39,7 @@ def copy_grls(entry2):
         logger.debug("Checkbutton enabled. Looking for files...")
         for root,dirs,files in os.walk(work_folder_path):
             for file in files:
-                if file.endswith('.grl'):
+                if file.endswith('.grl') and file.startswith(entry2):
                     if entry2+'.grl' == file:
                         shutil.copyfile(os.path.join(root,file),os.path.join(Input_folder_path,file))
                     if entry2+'_prj.grl' == file:
@@ -56,10 +56,15 @@ def copy_grls(entry2):
                         shutil.copyfile(os.path.join(root,file),os.path.join(Input_folder_path,file))
                     if entry2+'_nvdat0.grl' == file:
                         shutil.copyfile(os.path.join(root,file),os.path.join(Input_folder_path,file))
-    logger.debug("Copying central grl files...")
-    dest_path = os.path.join(work_folder_path,'dds')
-    shutil.copyfile(os.path.join(dest_path,'fcut.grl'),os.path.join(Input_folder_path,'fcut.grl'))
-    shutil.copyfile(os.path.join(dest_path,'local_data_type.grl'),os.path.join(Input_folder_path,'local_data_type.grl'))
+    for root,dirs,files in os.walk(work_folder_path):
+        for file in files:
+            if file == 'fcut.grl':
+                logger.debug("Copying fcut grl file...")
+                shutil.copyfile(os.path.join(root,'fcut.grl'),os.path.join(Input_folder_path,'fcut.grl'))
+            if file == 'local_data_type.grl':
+                logger.debug("Copying local_data_type grl file...")
+                shutil.copyfile(os.path.join(root,'local_data_type.grl'),os.path.join(Input_folder_path,'local_data_type.grl'))
+
 
 def collect_nc_data_n_actions():
     global pp_folder_path
@@ -142,6 +147,9 @@ def create_dummy_files():
                 size = len(L)
                 if size>1:
                     name = L[1][1:-1]
+                elif s.endswith('>\n'):
+                    L = s.split('<')
+                    name = L[1][:-2]
                 namelist.append(name)
         finallist = set(namelist)
         logger.debug("List obtained!! \nProceeding to create Collect_Inputs folder and dummy headers...!!")
