@@ -8,6 +8,8 @@ HEIGHT = 200
 WIDTH = 700
 import tkinter as tk
 from tkinter import *
+from tkinter.ttk import *
+
 root = tk.Tk()
 root.wm_title("Collect Inputs_V_1.0")
 include = "#include"
@@ -18,7 +20,8 @@ functions = "extern void"
 nc1 = "#define\tN"
 nc2 = "#define N"
 datatypes = ['boolean','u8','s8','u16','s16','u32','s32','u64','s64','flag','f32','f64','unsigned','signed','uint32','sint32','float','uint16','sint16','uint8','sint8','uint64','sint64','int','char']
-pp_folder = 'preprocess_gen\\'
+pp_folder_td4 = 'preprocess_gen\\'
+pp_folder_td5 = 'bld\\_incl\\'
 work_folders = ['asw','bsw','aggr']
 #Creating an object 
 logger=logging.getLogger()
@@ -28,6 +31,9 @@ Input_folder_path = ""
 pp_folder_path = ""
 work_folder_path = ""
 var = tk.IntVar()
+v = tk.StringVar()
+values = {"TD4" : "1", 
+          "TD5" : "2"}
 
 def copy_grls(entry2):
     global Input_folder_path
@@ -78,6 +84,7 @@ def collect_nc_data_n_actions():
             logger.debug("tmp_inp.h created !!\nProceeding to filter out only needed files and then extract relevant part from them..")
             for file in files:
                 if file.endswith('.h') and (not file.endswith('_mcr.h')) and (not file.endswith('tmp_inp.h')) and (not file.endswith('all_inputs.h')):
+                    logger.debug("Scanning file {} for NC's and variable declarations...".format(file))
                     with open(os.path.join(root,file), "r") as rfh:
                         s = " "
                         while(s):
@@ -103,30 +110,55 @@ def collect_nc_data_n_actions():
                 s = " "
                 while(s):
                     s = rfh_var.readline()
-                    if s.startswith(decl):
-                        wfh_var.write(s)
+                    if s.startswith(decl) and (s.find(';')>0):
+                        isarr = s.find('[')
+                        if isarr > 0:
+                            insrt = '[]'
+                            cnt_idx=s.count('[')
+                            up_s = s[:isarr]+insrt*cnt_idx+';'
+                            wfh_var.write(up_s+'\n')
+                        else:
+                            wfh_var.write(s)        
                 logger.debug("Sort complete and available in all_inputs.h!! \nProceeding to collect ACTIONS by scanning work folder...")
                 #collecting actions
                 work_folder_path = os.path.join(base_path,'work')
                 for dirss in work_folders:
+                    logger.debug("Scanning directory {} for action prototypes...".format(dirss))
                     action_folder_path = os.path.join(work_folder_path,dirss)
                     for roott, dirrs, filess in os.walk(action_folder_path):
                         for file in filess:
                             if file.endswith('.h') and (not file.endswith('_mcr.h')):
+                                logger.debug("Scanning {} file for actions...".format(file))
                                 with open(os.path.join(roott,file), "r") as rfhh:
                                     s = " "
                                     while(s):
                                         s = rfhh.readline()
                                         if s.startswith(decl) or s.startswith(decl_only_farm):
+                                            s = s.strip()
                                             L = s.split()
                                             size = len(L)
                                             if size>2:
-                                                if ((L[1] in datatypes) or (L[1] == "void")) and L[2].startswith(action) and (s[-2] == ';'):
-                                                    if L[1] == "void" :
-                                                        wfh_var.write(s[:-2] + '{}' + '\n')
+                                                if ((L[1] in datatypes) or (L[1] == "void")) and L[2].startswith(action) and (s[-1] == ';'):
+                                                    brac = s.find('(')
+                                                    le = len(s)
+                                                    args = (s[brac+1:-2].strip()).split(',')
+                                                    if len(args)==1 and args[0]=='void':
+                                                        wfh_var.write(s+'\n')
                                                     else:
-                                                        definitn = s[:-2] + '{'+'return ({})0;'.format(L[1])+'}'
-                                                        wfh_var.write(definitn + '\n')
+                                                        knwn = 1
+                                                        for each in args:
+                                                            if knwn==1:
+                                                                dt_par = each.split()
+                                                                for ech in dt_par:
+                                                                    if (ech.strip()).strip('*') in datatypes:
+                                                                        knwn = 1
+                                                                        break
+                                                                    else:
+                                                                        knwn = 0
+                                                            else:
+                                                                break
+                                                        if knwn==1:
+                                                                wfh_var.write(s+'\n')
                 logger.debug("ACTION's collected!!")
             wfh_var.close()
 
@@ -143,13 +175,12 @@ def create_dummy_files():
         while(s):
             s = rfh_1.readline()
             if s.startswith(include):
-                L = s.split()
+                logger.debug("#include found in - {}".format(s))
+                s = s.strip()
+                L = s.split('<')
                 size = len(L)
                 if size>1:
-                    name = L[1][1:-1]
-                elif s.endswith('>\n'):
-                    L = s.split('<')
-                    name = L[1][:-2]
+                    name = L[1][:-1]
                 namelist.append(name)
         finallist = set(namelist)
         logger.debug("List obtained!! \nProceeding to create Collect_Inputs folder and dummy headers...!!")
@@ -183,7 +214,7 @@ def create_dummy_files():
 
 def setuplogger():
     global pp_folder_path
-    #Create and configure logger 
+    #Create and configure logger
     logging.basicConfig(filename=os.path.join(pp_folder_path,"debug.log"), format='%(asctime)s %(message)s', filemode='w')   
     #Setting the threshold of logger to DEBUG 
     logger.setLevel(logging.DEBUG)
@@ -195,6 +226,7 @@ def gen_file_api(entry,entry2):
     global filepath
     global pp_folder
     global pp_folder_path
+    global v
     start = time.time()
     filepath = pathlib.Path(pathlib.PureWindowsPath(entry))
     split_fp = str(filepath).split('\\')
@@ -207,7 +239,19 @@ def gen_file_api(entry,entry2):
             valid_path = True
             break
     if valid_path is True:
-        pp_folder_path = os.path.join(base_path,pp_folder)
+        fols_in_PIS = os.listdir(base_path)
+        try:
+            if os.path.isdir(os.path.join(base_path,pp_folder_td4)):
+                pp_folder_path = os.path.join(base_path,pp_folder_td4)
+            else:
+                for dirss in fols_in_PIS:
+                    if dirss.startswith('_FS_'):
+                        pp_folder_path = os.path.join(base_path,dirss,pp_folder_td5)
+                        break
+        except OSError as error:
+            fail_message = "Exception occoured while finding preprocess_gen folder for selected build platform.\n Please use builded software."
+            lo_label3.config(fg='#ff0000',text = fail_message)
+            
         setuplogger()
         logger.debug("Logger setup...\nProceeding to collect NC's, variables and ACTION's...\n") 
         try:
@@ -237,7 +281,6 @@ def gen_file_api(entry,entry2):
     else:
         fail_message = "Invalid path!! \nCopy the full file path"
         lo_label3.config(fg='#ff0000',text = fail_message)
-    
 
     
 canvas = tk.Canvas(root, height=HEIGHT, width=WIDTH,bg='#f6f678' )
@@ -252,13 +295,29 @@ entry1 = tk.Entry(frame, bg='white',font=('Serif',10))
 entry1.place(relx=0.090,relwidth=0.73,relheight=1)
 lower_frame = tk.Frame(root, bd=5,highlightbackground="black",highlightthickness=1)
 entry2 = tk.Entry(lower_frame, bg='white',font=("Serif",10))
+lowerside_frame = tk.Frame(root, bd=5,highlightbackground="black",highlightthickness=1)
+label_lsf = tk.Label(lowerside_frame, text="Build Platform :", font=('Serif',10,'bold'))
 
 button = tk.Button(frame, text="Generate Files", bg='#c2c2a3', font=('Times',13), command=lambda: gen_file_api(entry1.get(),entry2.get()))
 button.place(relx=0.83,relwidth=0.1699,relheight=1)
+button.config(state=DISABLED)
 
 lower_frame.place(relx=0.008,rely=0.24,relwidth=0.5, relheight=0.3)
 entry2.place(relx=0.08,rely=0.5,relwidth=0.15,relheight=0.4)
 entry2.config(state=DISABLED)
+print(v.get())
+
+def Rbuttoncheck():
+    global v
+    if v.get() == '1' or v.get() == '2':
+        button.config(state=NORMAL)
+    else:
+        button.config(state=DISABLED)
+
+lowerside_frame.place(relx=0.516,rely=0.24,relwidth=0.476, relheight=0.3)
+label_lsf.place(relx=0.008,rely=0.1,relwidth=0.3,relheight=0.3)
+for (text, value) in values.items(): 
+    Radiobutton(lowerside_frame, text = text, variable = v, value = value, command=Rbuttoncheck).pack(side = TOP, ipady = 5)
 
 def activateCheck():
     global var
@@ -268,7 +327,7 @@ def activateCheck():
         entry2.config(state=DISABLED)
 
 cb = tk.Checkbutton(lower_frame,text='Enable to copy aggr specific common grl files',font=('Serif',10,'bold'),variable=var,command=activateCheck,anchor='nw')
-cb.place(rely=0.001,relwidth=1,relheight=0.45)
+cb.place(rely=0,relwidth=1,relheight=0.45)
 
 lower_frame2 = tk.Frame(root,bg='#f6f678', bd=3,highlightbackground="black",highlightthickness=1)
 lower_frame2.place(relx=0.008,rely=0.57,relwidth=0.984,relheight=0.40)
