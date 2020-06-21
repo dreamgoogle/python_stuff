@@ -101,10 +101,12 @@ def collect_nc_data_n_actions():
         #sorting NC's before variables into all_inputs.h
         with open(os.path.join(root,'tmp_inp.h'), "r") as rfh_var:
             with open(os.path.join(root,'all_inputs.h'), "w+") as wfh_var:
+                wfh_var.write('#ifndef ALL_INPUTS_H\n')
+                wfh_var.write('#define ALL_INPUTS_H\n')
                 s = " "
                 while(s):
                     s = rfh_var.readline()
-                    if s.startswith(nc1) or s.startswith(nc2):
+                    if (s.startswith(nc1) or s.startswith(nc2)) and (not(s.endswith('\\\n'))):
                         wfh_var.write(s)
                 rfh_var.seek(0)
                 s = " "
@@ -113,12 +115,21 @@ def collect_nc_data_n_actions():
                     if s.startswith(decl) and (s.find(';')>0):
                         isarr = s.find('[')
                         if isarr > 0:
-                            insrt = '[]'
-                            cnt_idx=s.count('[')
-                            up_s = s[:isarr]+insrt*cnt_idx+';'
-                            wfh_var.write(up_s+'\n')
+                            bl_chk=s.find(']')
+                            if bl_chk-isarr==1:
+                                wfh_var.write(s)
+                            else:
+                                le = len(s)
+                                isunknwn = 0
+                                for i in range(isarr,le):
+                                    if s[i]=='[':
+                                        if not((s[i+1] == 'N') or (s[i+1].isnumeric())):
+                                            isunknwn = 1
+                                            break
+                                if isunknwn == 0:
+                                    wfh_var.write(s)
                         else:
-                            wfh_var.write(s)        
+                            wfh_var.write(s)    
                 logger.debug("Sort complete and available in all_inputs.h!! \nProceeding to collect ACTIONS by scanning work folder...")
                 #collecting actions
                 work_folder_path = os.path.join(base_path,'work')
@@ -160,6 +171,7 @@ def collect_nc_data_n_actions():
                                                         if knwn==1:
                                                                 wfh_var.write(s+'\n')
                 logger.debug("ACTION's collected!!")
+                wfh_var.write('#endif\n')
             wfh_var.close()
 
 def create_dummy_files():
@@ -183,6 +195,34 @@ def create_dummy_files():
                     name = L[1][:-1]
                 namelist.append(name)
         finallist = set(namelist)
+        path_split = str(filepath).split('\\')
+        logger.debug("Path split...")
+        path_split[len(path_split)-1] = path_split[len(path_split)-1].replace('.c','_im.h')
+        logger.debug("Renamed...")
+        imfile = path_split[len(path_split)-1]
+        if imfile in finallist:
+            logger.debug("module import header found...")
+            ext_path = ""
+            for dirt in path_split:
+                ext_path = ext_path+dirt+'\\'
+            logger.debug("new path : {}...".format(ext_path))
+            ext_path = pathlib.Path(pathlib.PureWindowsPath(ext_path))
+            namelist = []
+            with open(ext_path, "r") as rfh_2:
+                logger.debug("module import header opened for reading...")
+                s = " "
+                while(s):
+                    s = rfh_2.readline()
+                    if s.startswith(include):
+                        logger.debug("#include found in - {}".format(s))
+                        s = s.strip()
+                        L = s.split('<')
+                        size = len(L)
+                        if size>1:
+                            name = L[1][:-1]
+                        namelist.append(name)
+            for files in namelist:
+                finallist.add(files)
         logger.debug("List obtained!! \nProceeding to create Collect_Inputs folder and dummy headers...!!")
         try:
             Input_folder_path = os.path.join(pp_folder_path,'Collect_Inputs')
@@ -199,7 +239,7 @@ def create_dummy_files():
                     name = name.replace('.','_')
                     guard1 = '#ifndef '+name
                     guard2 = '#define '+name
-                    guard3 = 'endif'
+                    guard3 = '#endif'
                     wfh_1.write(guard1 + '\n')
                     wfh_1.write(guard2)
                     wfh_1.write('\n'*10)
@@ -336,3 +376,4 @@ lo_label3 = tk.Label(lower_frame2,font=('Serif',9,'bold'),anchor='nw', justify='
 lo_label3.place(relx=0.0001,rely=0,relwidth=0.9998,relheight=1)
 
 root.mainloop()
+
