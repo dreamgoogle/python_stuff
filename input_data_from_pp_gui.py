@@ -167,11 +167,14 @@ def fetch_NC_def_frmPP(pp_folder_path):
     return fetched_ncees
 
 def Parse_Inputs(rawdata):
+    logger.info(",,,Inside Parse_Inputs\n")
     global list_of_NC_to_fetch_frmPP
     tmp_list = []
     lis = rawdata.split(chr(7))
     logger.debug("Adjusting list for MAPS,AXIS,StringData and Conversion tables presence if any")
+    logger.info(",,,Entering standardize_rawdata_form\n")
     lis = standardize_rawdata_form(lis)
+    logger.info(",,,Out of standardize_rawdata_form\n")
     logger.debug("Updated Data list: {}".format(lis))
     length = len(lis)
     no_of_data = int((length - 7)/9)
@@ -208,9 +211,11 @@ def Parse_Inputs(rawdata):
                 list_of_NC_to_fetch_frmPP.append(dat.mode)
                 logger.debug("list_of_NC_to_fetch_frmPP:{}\n".format(list_of_NC_to_fetch_frmPP))
         tmp_list.append(dat)
+    logger.info(",,,Leaving Parse_Inputs\n")
     return tmp_list
     
 def Parse_ImActions(rawdata):
+    logger.info(",,,Inside Parse_ImActions\n")
     tmp_str = rawdata
     tmp_str = re.sub(r'[\x00-\x06,\x08-\x1F]+', '', tmp_str)
     actions = tmp_str.split('\x07\x07ACTION_')
@@ -223,6 +228,7 @@ def Parse_ImActions(rawdata):
         tmp = re.split('[{ ]',actns)
         final_ac_list.append(tmp[0])
     logger.debug("final_ac_list : {}\n".format(final_ac_list))
+    logger.info(",,,Leaving Parse_ImActions\n")
     return final_ac_list
 
 def fetch_ACTIONdefs_frmPP(pp_folder_path):
@@ -262,17 +268,17 @@ def spec_parser(specpath,pp_folder_path):
     EtD = False
     GnI = False
     if str(specpath).endswith(".doc"):
-        logger.debug("Accessing provided spec path : {}\n".format(specpath))
+        logger.info(",,Accessing provided spec path : {}\n".format(specpath))
         with open(specpath,'r',encoding='ansi') as rfh:
             s = " "
             while s:
                 s = rfh.readline()
                 if s.startswith(START_HEADER):
-                    logger.debug("Start header found...\n")
+                    logger.info(",,Start header found...\n")
                     OpD = True
                     break
                 elif s.startswith('Input Data'):
-                    logger.debug("No Output data in module. Input data found..\n")
+                    logger.info(",,No Output data in module. Input data found..\n")
                     InD = True
                     break
             if OpD is True or InD is True:
@@ -453,13 +459,14 @@ def spec_parser(specpath,pp_folder_path):
             
                     if GnI is True:
                         break
-                logger.debug("Spec Parse process over\n")
+                logger.info(",,Spec Parse process over\n")
             else:
                 logger.error("No Input data or Output data found in module\n")
         logger.debug("Spec closed. \n")
 
         if OpD is True or InD is True:
-            logger.debug("Data_Definition_str : {} \n".format(Data_Definition_str))
+            if OpD is True:
+                logger.debug("Data_Definition_str : {} \n".format(Data_Definition_str))
             if InD is True:
                 logger.debug("Input_Data_str : {} \n".format(Input_Data_str))
             if CaD is True:
@@ -467,11 +474,12 @@ def spec_parser(specpath,pp_folder_path):
             if ImA is True:
                 logger.debug("Import_Actions_str : {} \n".format(Import_Actions_str))
 
-            logger.debug("Creating module_inputs.h ...")
+            logger.info(",,Creating module_inputs.h ...\n")
             with open(os.path.join(pp_folder_path,'module_inputs.h'),'w') as wfh:
+                logger.info(",,Creating input data declarations list ...\n")
                 dl = []
                 for data in Input_Data:
-                    logger.debug("Identifying data tyoe of {} ...".format(data.name))
+                    logger.debug("Identifying data tyoe of {} ...\n".format(data.name))
                     dt = identify_DT(data.hexR)
                     logger.debug("Identified as {}..\n".format(dt))
                     logger.debug("Creating declaration..\n")
@@ -518,8 +526,10 @@ def spec_parser(specpath,pp_folder_path):
                         else:
                             name = data.name.lower()
                         dl.append('extern\t'+dt+'\t'+name+';\n')
-                logger.debug("Declaration creation process over..\nFetching collected NC's definition from PP folder\n")   
+                logger.info(",,Declaration creation process over..\n")
+                logger.info(",,Entering fetch_NC_def_frmPP for Fetching collected NC's definition from PP folder\n")   
                 fetched_ncees = fetch_NC_def_frmPP(pp_folder_path)
+                logger.info(",,Out of fetch_NC_def_frmPP..\n")
                 logger.debug("Fetch complete in fetched_ncees = {}\nWritting it to module_inputs.h now\n".format(fetched_ncees))
                 wfh.write("#ifndef MODULE_INPUTS_H\n")
                 wfh.write("#define MODULE_INPUTS_H\n")
@@ -530,8 +540,10 @@ def spec_parser(specpath,pp_folder_path):
                 for data in sorted(set(dl)):
                     wfh.write(data)
                 try:
+                    logger.info(",,Entering fetch_ACTIONdefs_frmPP\n")
                     logger.debug("Fetching needed action defs from PIS\n")
                     actions_dict = fetch_ACTIONdefs_frmPP(pp_folder_path)
+                    logger.info(",,Out of fetch_ACTIONdefs_frmPP..\n")
                     logger.debug("Fetch completed in form of ACTION dictionary : {}\nNow writting it to module_inputs.h\n".format(actions_dict))
                     logger.debug("Import_Actions : {}".format(Import_Actions))
                     for actions_1 in Import_Actions:
@@ -593,7 +605,7 @@ def collect_nc_data_n_actions(specpath,base_path,pp_folder_path):
     global logger
     global work_folders
     work_folder_path = os.path.join(base_path,'work')
-    logger.debug("Proceeding to collect ACTIONS...")
+    logger.info(",Proceeding to collect ACTIONS\n")
     with open(os.path.join(pp_folder_path,'all_actions.h'), "w") as wfh_var:
         wfh_var.write('#ifndef ALL_ACTIONS_H\n')
         wfh_var.write('#define ALL_ACTIONS_H\n')
@@ -636,12 +648,12 @@ def collect_nc_data_n_actions(specpath,base_path,pp_folder_path):
                                                         break
                                                 if knwn==1:
                                                         wfh_var.write(s+'\n')
-        logger.debug("ACTION's collected!!")
         wfh_var.write('#endif\n')
+        logger.info(",ACTION's collected!!")
     try:
-        logger.debug("Spec parsing started for spec {}...\n".format(specpath)) 
+        logger.info(",Spec parsing started for spec {}...\n".format(specpath))
         spec_parser(specpath,pp_folder_path)
-        logger.debug("Spec parsing complete with out errors!!")
+        logger.info(",Spec parsing complete with out errors!!")
     except:
         logger.error("Exception occured while parsing spec\n")
 
