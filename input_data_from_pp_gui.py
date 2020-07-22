@@ -138,14 +138,17 @@ def fetch_NC_def_frmPP(pp_folder_path):
     with open(os.path.join(pp_folder_path,'all_hash_defines.h'),'w') as wfh:
         for root, dirs, files in os.walk(pp_folder_path):
             for file in files:
-                if file.endswith('.h') and (not file.endswith('_mcr.h')) and (not file.endswith('tmp_inp.h')) and (not file.endswith('all_actions.h')) and (not file.endswith('all_hash_defines.h')):
+                if file.endswith('.h') and (not file.endswith('_mcr.h')) and (not file.endswith('all_actions.h')) and (not file.endswith('all_hash_defines.h')):
                     #logger.debug("Collecting NC from {}".format(file))
                     with open(os.path.join(root,file),'r') as rfh:
                         s = " "
                         while s:
-                            s = rfh.readline()
-                            if s.strip().startswith('#define'):
-                                wfh.write(s.strip()+'\n')
+                            try:
+                                s = rfh.readline()
+                                if s.strip().startswith('#define'):
+                                    wfh.write(s.strip()+'\n')
+                            except:
+                                logger.warning(',,{}-{} - Line skipped for parse. It contains unknown chars. FUNC - fetch_NC_def_frmPP\n'.format(file,s))
     nc_set = set(list_of_NC_to_fetch_frmPP)
     logger.debug("list_of_NC_to_fetch_frmPP: {}".format(list_of_NC_to_fetch_frmPP))
     logger.debug("nc_set: {}".format(nc_set))
@@ -272,7 +275,10 @@ def spec_parser(specpath,pp_folder_path):
         with open(specpath,'r',encoding='ansi') as rfh:
             s = " "
             while s:
-                s = rfh.readline()
+                try:
+                    s = rfh.readline()
+                except:
+                    logger.warning('Specification-{} Line skipped for parse\n'.format(s))
                 if s.startswith(START_HEADER):
                     logger.info(",,Start header found...\n")
                     OpD = True
@@ -282,7 +288,10 @@ def spec_parser(specpath,pp_folder_path):
                     InD = True
                     break
             if OpD is True or InD is True:
-                s = rfh.readline()
+                try:
+                    s = rfh.readline()
+                except:
+                    logger.warning('Specification-{} Line skipped for parse\n'.format(s))
                 while s:
                     if (s.endswith(ID) or s.endswith(CD) or s.endswith(CNFD) or s.endswith(AD) or s.endswith(IA) or s.endswith(ET) or s.endswith(GI) or s.endswith(AC)):
                         if s.endswith(ID):
@@ -453,9 +462,15 @@ def spec_parser(specpath,pp_folder_path):
                             GnI = True               
                         else:
                             pass
-                        s = rfh.readline()
+                        try:
+                            s = rfh.readline()
+                        except:
+                            logger.warning('Specification-{} Line skipped for parse\n'.format(s))
                     else:
-                        s = s + rfh.readline()
+                        try:
+                            s = s + rfh.readline()
+                        except:
+                            logger.warning('Specification-{} Line skipped for parse\n'.format(s))
             
                     if GnI is True:
                         break
@@ -618,36 +633,22 @@ def collect_nc_data_n_actions(specpath,base_path,pp_folder_path):
                 for file in filess:
                     if file.endswith('.h') and (not file.endswith('_mcr.h')):
                         logger.debug("{} scanning".format(file))
-                        with open(os.path.join(roott,file), "r") as rfhh:
-                            s = " "
-                            while(s):
-                                s = rfhh.readline()
-                                if s.strip().startswith('extern'):
-                                    s = s.strip()
-                                    L = s.split()
-                                    size = len(L)
-                                    if size>2:
-                                        if ((L[1] in datatypes) or (L[1] == "void")) and L[2].startswith('ACTION_') and (s[-1] == ';'):
-                                            brac = s.find('(')
-                                            le = len(s)
-                                            args = (s[brac+1:-2].strip()).split(',')
-                                            if len(args)==1 and args[0]=='void':
-                                                wfh_var.write(s+'\n')
-                                            else:
-                                                knwn = 1
-                                                for each in args:
-                                                    if knwn==1:
-                                                        dt_par = each.split()
-                                                        for ech in dt_par:
-                                                            if (ech.strip()).strip('*') in datatypes:
-                                                                knwn = 1
-                                                                break
-                                                            else:
-                                                                knwn = 0
-                                                    else:
-                                                        break
-                                                if knwn==1:
-                                                        wfh_var.write(s+'\n')
+                        if not (file == 'efx.h'):
+                            with open(os.path.join(roott,file), "r") as rfhh:
+                                s = " "
+                                while(s):
+                                    try:
+                                        s = rfhh.readline()
+                                        if s.strip().startswith('extern'):
+                                            s = s.strip()
+                                            L = s.split()
+                                            size = len(L)
+                                            if size>2:
+                                                if L[2].startswith('ACTION_') and (s[-1] == ';'):
+                                                    wfh_var.write(s+'\n')
+                                    except:
+                                        logger.warning(',,{}-{} - Line skipped for parse. It contains unknown chars. FUNC - collect_nc_data_n_actions\n'.format(file,s))
+
         wfh_var.write('#endif\n')
         logger.info(",ACTION's collected!!")
     try:
@@ -657,14 +658,17 @@ def collect_nc_data_n_actions(specpath,base_path,pp_folder_path):
     except:
         logger.error("Exception occured while parsing spec\n")
 
-def create_dummy_files(filepath,pp_folder_path,base_path):
+def create_dummy_files(filepath,pp_folder_path,path_for_CI_folder):
     global Input_folder_path
     namelist = []
     logger.debug("Opening the file to collect list of needed headers...!!")
     with open(filepath, "r") as rfh_1:
         s = " "
         while(s):
-            s = rfh_1.readline()
+            try:
+                s = rfh_1.readline()
+            except:
+                logger.warning('create_dummy_files1-{} Line skipped for parse'.format(s))
             if s.startswith('#include'):
                 logger.debug("#include found in - {}".format(s))
                 s = s.strip()
@@ -688,7 +692,10 @@ def create_dummy_files(filepath,pp_folder_path,base_path):
                 logger.debug("module import header opened for reading...")
                 s = " "
                 while(s):
-                    s = rfh_2.readline()
+                    try:
+                        s = rfh_2.readline()
+                    except:
+                        logger.warning('create_dummy_files2 - {} Line skipped for parse'.format(s))
                     if s.startswith('#include'):
                         logger.debug("#include found in - {}".format(s))
                         s = s.strip()
@@ -701,10 +708,10 @@ def create_dummy_files(filepath,pp_folder_path,base_path):
                 finallist.add(files)
         logger.debug("List obtained!! \nProceeding to create Collect_Inputs_module_name folder and dummy headers...!!")
         try:
-            col_inp_fol = os.path.join(base_path,'Collect_Inputs')
+            col_inp_fol = os.path.join(path_for_CI_folder,'Collect_Inputs')
             fol_name = 'Collect_Inputs_'+module_name
             Input_folder_path = os.path.join(col_inp_fol,fol_name)
-            f = [x[1] for x in os.walk(base_path)]
+            f = [x[1] for x in os.walk(path_for_CI_folder)]
             if 'Collect_Inputs' in f[0]:
                 g = [y[1] for y in os.walk(col_inp_fol)]
                 if fol_name in g[0]:
@@ -737,9 +744,9 @@ def create_dummy_files(filepath,pp_folder_path,base_path):
             fail_message = "Exception occoured while removing old {} folder and \nsubsequently creating dummy files!!\nEnsure {} folder or its files are not in use.".format(fol_name,fol_name)
             lo_label3.config(fg='#ff0000',text = fail_message)
 
-def setuplogger(pp_folder_path):
+def setuplogger(path_for_CI_folder):
     #Create and configure logger
-    logging.basicConfig(filename=os.path.join(pp_folder_path,"debug_log.csv"), format='%(levelname)s,%(asctime)s,%(message)s', filemode='w')
+    logging.basicConfig(filename=os.path.join(path_for_CI_folder,"debug_log.csv"), format='%(levelname)s,%(asctime)s,%(message)s', filemode='w')
     #Setting the threshold of logger to DEBUG
     logger.setLevel(logging.DEBUG)
 
@@ -756,10 +763,13 @@ def gen_file_api(entry,entry3,entry2):
     for fols in split_fp:
         if fols != 'work':
             base_path = base_path+fols+'\\'
+            PIS = fols
         else:
             valid_path = True
             break
+    path_for_CI_folder = base_path.replace(PIS+'\\',"")
     if valid_path is True:
+        setuplogger(path_for_CI_folder)
         fols_in_PIS = os.listdir(base_path)
         
         if os.path.isdir(os.path.join(base_path,pp_folder_td4)):
@@ -772,7 +782,6 @@ def gen_file_api(entry,entry3,entry2):
                     pp_fol_exist = True
                     break
         if  pp_fol_exist is True:   
-            setuplogger(pp_folder_path)
             logger.debug("Logger setup...")
             logger.info("Entered C-file path: <{}>\n".format(filepath))
             logger.info("Entered Spec path: <{}>\n".format(specpath))
@@ -787,7 +796,7 @@ def gen_file_api(entry,entry3,entry2):
                 logger.debug("NC's, variables and ACTION's collected successfully !!Proceeding to create dummy headers...\n") 
                 try:
                     logger.info("Entering CREATE_DUMMY_FILES\n")
-                    create_dummy_files(filepath,pp_folder_path,base_path)
+                    create_dummy_files(filepath,pp_folder_path,path_for_CI_folder)
                     logger.info("Out of CREATE_DUMMY_FILES\n")
                     logger.debug("Creation of Collect_Inputs_module name folder and dummy headers successful !!Proceeding to copy grl's...\n") 
                     try:
@@ -796,7 +805,7 @@ def gen_file_api(entry,entry3,entry2):
                         logger.info("Out of COPY_GRLS\n")
                         logger.debug("Copy successfull !!\nReady for next run...\n")
                         logger.debug("---------------------------------------------"*3)
-                        shutil.copyfile(os.path.join(pp_folder_path,'debug_log.csv'),os.path.join(Input_folder_path,'debug_log.csv'))
+                        shutil.copyfile(os.path.join(path_for_CI_folder,'debug_log.csv'),os.path.join(Input_folder_path,'debug_log.csv'))
                         end = time.time()
                         tt = round((end-start),3)
                         pass_message = "Find all inputs in Collect_Inputs_module_name folder created at\n"+Input_folder_path+"\nTask finished in {a} secs.".format(a=tt)
@@ -818,7 +827,6 @@ def gen_file_api(entry,entry3,entry2):
             fail_message = "Exception occoured while finding preprocess_gen folder for selected build platform.\n Please use builded software."
             lo_label3.config(fg='#ff0000',text = fail_message)
     else:
-        logger.error("Standard PIS folder structure not found in C-file path. Execution skipped.\n")
         fail_message = "Invalid path!! \nCopy the full file path"
         lo_label3.config(fg='#ff0000',text = fail_message)
 
