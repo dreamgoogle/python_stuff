@@ -13,11 +13,11 @@ from tkinter import *
 from tkinter.ttk import *
 
 root = tk.Tk()
-root.wm_title("Collect Inputs_V_1.0")
+root.wm_iconbitmap('Collect_Inputs.ico')
+root.wm_title("Collect Inputs_V1.0")
 datatypes = ['boolean','u8','s8','u16','s16','u32','s32','u64','s64','flag','f32','f64','unsigned','signed','uint32','sint32','float','uint16','sint16','uint8','sint8','uint64','sint64','int','char']
 pp_folder_td4 = 'preprocess_gen\\'
 pp_folder_td5 = 'bld\\_incl\\'
-work_folders = ['asw','bsw','aggr']
 #Creating an object 
 logger=logging.getLogger()
 Input_folder_path = ""
@@ -133,19 +133,19 @@ def standardize_rawdata_form(listt):
     
 def fetch_NC_def_frmPP(pp_folder_path):
     global list_of_NC_to_fetch_frmPP
+    global logger
     nc_set = set()
     fetched_ncees = []
     with open(os.path.join(pp_folder_path,'all_hash_defines.h'),'w') as wfh:
         for root, dirs, files in os.walk(pp_folder_path):
             for file in files:
                 if file.endswith('.h') and (not file.endswith('_mcr.h')) and (not file.endswith('all_actions.h')) and (not file.endswith('all_hash_defines.h')):
-                    #logger.debug("Collecting NC from {}".format(file))
                     with open(os.path.join(root,file),'r') as rfh:
                         s = " "
                         while s:
                             try:
                                 s = rfh.readline()
-                                if s.strip().startswith('#define'):
+                                if s.strip().startswith('#define N') or s.strip().startswith('#define\tN'):
                                     wfh.write(s.strip()+'\n')
                             except:
                                 logger.warning(',,{}-{} - Line skipped for parse. It contains unknown chars. FUNC - fetch_NC_def_frmPP\n'.format(file,s))
@@ -153,6 +153,7 @@ def fetch_NC_def_frmPP(pp_folder_path):
     logger.debug("list_of_NC_to_fetch_frmPP: {}".format(list_of_NC_to_fetch_frmPP))
     logger.debug("nc_set: {}".format(nc_set))
     with open(os.path.join(pp_folder_path,'all_hash_defines.h'),'r') as rfh:
+        counter = 1000
         for ncees in nc_set:
             found = False
             rfh.seek(0)
@@ -160,12 +161,52 @@ def fetch_NC_def_frmPP(pp_folder_path):
             while s:
                 s = rfh.readline()
                 if s.startswith('#define '+ncees) or s.startswith('#define'+'\t'+ncees):
-                    fetched_ncees.append(s)
-                    found = True
+                    logger.debug("s1: {}".format(s))
+                    brk_nc = s.strip().split()
+                    logger.debug("1\n")
+                    if len(brk_nc)>2:
+                        logger.debug("2\n")
+                        value_uc = brk_nc[2].rstrip('uU')
+                        logger.debug("3\n")
+                        if value_uc.startswith('0x') or value_uc.startswith('0X') or value_uc.isnumeric():
+                            logger.debug("4\n")
+                            fetched_ncees.append(s)
+                            found = True
+                        else:
+                            logger.debug("5\n")
+                            if ncees.startswith('NC_FID') or ncees.startswith('NC_IDX'):
+                                value_1 = counter + 1
+                                counter = counter + 1
+                            else:
+                                value_1 = 2
+                            logger.debug("6\n")
+                            if ncees.endswith('('):
+                                arr_nc_name = brk_nc[1]
+                            else:
+                                arr_nc_name = ncees
+                            logger.debug("6a\n")
+                            coment = "/*{} found with non-numeric value in preprocess_gen. Dummy value here*/\n".format(arr_nc_name)
+                            logger.debug("6b\n")
+                            def_nc1 = coment+'#define'+'\t'+arr_nc_name+'\t'+'('+str(value_1)+')'+'\n'
+                            logger.debug("6c\n")
+                            fetched_ncees.append(def_nc1)
+                            logger.debug("6d\n")
+                            found = True
                     break
             if not found:
-                coment = "/*NC {} not found in preprocess_gen. Dummy value here*/\n".format(ncees)
-                def_nc = coment+'#define'+'\t'+ncees+'\t'+'(1)'+'\n'
+                logger.debug("s2: {}".format(s))
+                if ncees.startswith('NC_FID') or ncees.startswith('NC_IDX'):
+                    value_1 = counter + 1
+                    counter = counter + 1
+                else:
+                    value_1 = 2
+                logger.debug("7\n")
+                if ncees.endswith('('):
+                    arr_nc_name1 = ncees + 'i)'
+                else:
+                    arr_nc_name1 = ncees
+                coment = "/*{} not found in preprocess_gen. Dummy value here*/\n".format(arr_nc_name1)
+                def_nc = coment+'#define'+'\t'+arr_nc_name1+'\t'+'('+str(value_1)+')'+'\n'
                 fetched_ncees.append(def_nc)
     return fetched_ncees
 
@@ -204,15 +245,23 @@ def Parse_Inputs(rawdata):
                     list_of_NC_to_fetch_frmPP.append(k)
             logger.debug("dat.size:{}\n".format(dat.size))
             logger.debug("list_of_NC_to_fetch_frmPP:{}\n".format(list_of_NC_to_fetch_frmPP))
-        if dat.name.startswith('IP_') or dat.name.startswith('ID_'):
+        if dat.name.startswith('NC_') or dat.name.startswith('NLC_'):
+            if dat.name.find('[')>-1:
+                name = dat.name[0:dat.name.find('[')].strip()+'('
+            else:
+                name = dat.name.strip()
+            list_of_NC_to_fetch_frmPP.append(name)  
+        elif dat.name.startswith('IP_') or dat.name.startswith('ID_'):
             i_for_size = int(i)
-        if dat.name.startswith('LDP'):
+        elif dat.name.startswith('LDP'):
             tmp_list[i_for_size].size.append(dat.mode)
             tmp_list[i_for_size].axis.append(dat.name.lower())
             tmp_list[i_for_size].dimn += 1
             if not dat.mode.isnumeric():
                 list_of_NC_to_fetch_frmPP.append(dat.mode)
                 logger.debug("list_of_NC_to_fetch_frmPP:{}\n".format(list_of_NC_to_fetch_frmPP))
+        else:
+            pass
         tmp_list.append(dat)
     logger.info(",,,Leaving Parse_Inputs\n")
     return tmp_list
@@ -260,6 +309,7 @@ def spec_parser(specpath,pp_folder_path):
     Input_Data = []
     #Calibration_Data = []
     Import_Actions = []
+    Configuration_Data = []
     global list_of_NC_to_fetch_frmPP
     list_of_NC_to_fetch_frmPP = []
     OpD = False
@@ -295,19 +345,19 @@ def spec_parser(specpath,pp_folder_path):
                 while s:
                     if (s.endswith(ID) or s.endswith(CD) or s.endswith(CNFD) or s.endswith(AD) or s.endswith(IA) or s.endswith(ET) or s.endswith(GI) or s.endswith(AC)):
                         if s.endswith(ID):
-                            #logger.debug("Data_Definition string found...\nData_Definition string getting parsed...\n")
+                            #logger.debug("Data_Definition string found...Data_Definition string getting parsed...\n")
                             InD = True
                             Data_Definition_str = s
                             #Data_Definition = Parse_Inputs(s)
                             #logger.debug("Parse success\n")
                         elif s.endswith(CD):
                             if InD is True:
-                                logger.debug("Input_Data string found...\nInput_Data string getting parsed...\n")
+                                logger.debug("Input_Data string found...Input_Data string getting parsed...\n")
                                 Input_Data_str = s
                                 Input_Data = Parse_Inputs(s)
                                 logger.debug("Parse success\n")
                             elif OpD is True:
-                                #logger.debug("Data_Definition string found...\nData_Definition string getting parsed...\n")
+                                #logger.debug("Data_Definition string found...Data_Definition string getting parsed...\n")
                                 Data_Definition_str = s
                                 #Data_Definition = Parse_Inputs(s)
                                 #logger.debug("Parse success\n")
@@ -316,19 +366,19 @@ def spec_parser(specpath,pp_folder_path):
                             CaD = True
                         elif s.endswith(CNFD):
                             if CaD is True:
-                                #logger.debug("Calibration_Data string found...\Calibration_Data string getting parsed...\n")
+                                #logger.debug("Calibration_Data string found...Calibration_Data string getting parsed...\n")
                                 Calibration_Data_str = s
                                 #Calibration_Data = Parse_Inputs(s)
                                 #logger.debug("Parse success\n")
                                 pass
                             elif InD is True:
-                                logger.debug("Input_Data string found...\nInput_Data string getting parsed...\n")
+                                logger.debug("Input_Data string found...Input_Data string getting parsed...\n")
                                 Input_Data_str = s
                                 Input_Data = Parse_Inputs(s)
                                 logger.debug("Parse success\n")
                                 pass
                             elif OpD is True:
-                                #logger.debug("Data_Definition string found...\nData_Definition string getting parsed...\n")
+                                #logger.debug("Data_Definition string found...Data_Definition string getting parsed...\n")
                                 Data_Definition_str = s
                                 #Data_Definition = Parse_Inputs(s)
                                 #logger.debug("Parse success\n")
@@ -338,22 +388,25 @@ def spec_parser(specpath,pp_folder_path):
                             CnD = True
                         elif s.endswith(AD):
                             if CnD is True:
-                                #Configuration_Data = Parse_Inputs(s)
+                                logger.debug("Configuration_Data string found...Configuration_Data string getting parsed...\n")
+                                Configuration_Data_str = s
+                                Configuration_Data = Parse_Inputs(s)
+                                logger.debug("Parse success\n")
                                 pass
                             elif CaD is True:
-                                #logger.debug("Calibration_Data string found...\Calibration_Data string getting parsed...\n")
+                                #logger.debug("Calibration_Data string found...Calibration_Data string getting parsed...\n")
                                 Calibration_Data_str = s
                                 #Calibration_Data = Parse_Inputs(s)
                                 #logger.debug("Parse success\n")
                                 pass
                             elif InD is True:
-                                logger.debug("Input_Data string found...\nInput_Data string getting parsed...\n")
+                                logger.debug("Input_Data string found...Input_Data string getting parsed...\n")
                                 Input_Data_str = s
                                 Input_Data = Parse_Inputs(s)
                                 logger.debug("Parse success\n")
                                 pass
                             elif OpD is True:
-                                #logger.debug("Data_Definition string found...\Data_Definition string getting parsed...\n")
+                                #logger.debug("Data_Definition string found...Data_Definition string getting parsed...\n")
                                 Data_Definition_str = s
                                 #Data_Definition = Parse_Inputs(s)
                                 #logger.debug("Parse success\n")
@@ -366,22 +419,25 @@ def spec_parser(specpath,pp_folder_path):
                                 #Action_Definitions = Parse_Inputs(s)
                                 pass
                             elif CnD is True:
-                                #Configuration_Data = Parse_Inputs(s)
+                                logger.debug("Configuration_Data string found...Configuration_Data string getting parsed...\n")
+                                Configuration_Data_str = s
+                                Configuration_Data = Parse_Inputs(s)
+                                logger.debug("Parse success\n")
                                 pass
                             elif CaD is True:
-                                #logger.debug("Calibration_Data string found...\Calibration_Data string getting parsed...\n")
+                                #logger.debug("Calibration_Data string found...Calibration_Data string getting parsed...\n")
                                 Calibration_Data_str = s
                                 #Calibration_Data = Parse_Inputs(s)
                                 #logger.debug("Parse success\n")
                                 pass
                             elif InD is True:
-                                logger.debug("Input_Data string found...\Input_Data string getting parsed...\n")
+                                logger.debug("Input_Data string found...Input_Data string getting parsed...\n")
                                 Input_Data_str = s
                                 Input_Data = Parse_Inputs(s)
                                 logger.debug("Parse success\n")
                                 pass
                             elif OpD is True:
-                                #logger.debug("Data_Definition string found...\Data_Definition string getting parsed...\n")
+                                #logger.debug("Data_Definition string found...Data_Definition string getting parsed...\n")
                                 Data_Definition_str = s
                                 #Data_Definition = Parse_Inputs(s)
                                 #logger.debug("Parse success\n")
@@ -391,7 +447,7 @@ def spec_parser(specpath,pp_folder_path):
                             ImA = True
                         elif s.endswith(ET):
                             if ImA is True:
-                                logger.debug("Import_Actions string found...\Import_Actions string getting parsed...\n")
+                                logger.debug("Import_Actions string found...Import_Actions string getting parsed...\n")
                                 Import_Actions_str = s
                                 Import_Actions = Parse_ImActions(s)
                                 logger.debug("Parse success\n")
@@ -400,22 +456,25 @@ def spec_parser(specpath,pp_folder_path):
                                 #Action_Definitions = Parse_ImActions(s)
                                 pass
                             elif CnD is True:
-                                #Configuration_Data = Parse_Inputs(s)
+                                logger.debug("Configuration_Data string found...Configuration_Data string getting parsed...\n")
+                                Configuration_Data_str = s
+                                Configuration_Data = Parse_Inputs(s)
+                                logger.debug("Parse success\n")
                                 pass
                             elif CaD is True:
-                                #logger.debug("Calibration_Data string found...\Calibration_Data string getting parsed...\n")
+                                #logger.debug("Calibration_Data string found...Calibration_Data string getting parsed...\n")
                                 Calibration_Data_str = s
                                 #Calibration_Data = Parse_Inputs(s)
                                 #logger.debug("Parse success\n")
                                 pass
                             elif InD is True:
-                                logger.debug("Input_Data string found...\Input_Data string getting parsed...\n")
+                                logger.debug("Input_Data string found...Input_Data string getting parsed...\n")
                                 Input_Data_str = s
                                 Input_Data = Parse_Inputs(s)
                                 logger.debug("Parse success\n")
                                 pass
                             elif OpD is True:
-                                #logger.debug("Data_Definition string found...\Data_Definition string getting parsed...\n")
+                                #logger.debug("Data_Definition string found...Data_Definition string getting parsed...\n")
                                 Data_Definition_str = s
                                 #Data_Definition = Parse_Inputs(s)
                                 #logger.debug("Parse success\n")
@@ -428,7 +487,7 @@ def spec_parser(specpath,pp_folder_path):
                                 #Error_Treatment = Parse_Inputs(s)
                                 pass
                             elif ImA is True:
-                                logger.debug("Import_Actions string found...\Import_Actions string getting parsed...\n")
+                                logger.debug("Import_Actions string found...Import_Actions string getting parsed...\n")
                                 Import_Actions_str = s
                                 Import_Actions = Parse_ImActions(s)
                                 logger.debug("Parse success\n")
@@ -437,22 +496,25 @@ def spec_parser(specpath,pp_folder_path):
                                 #Action_Definitions = Parse_ImActions(s)
                                 pass
                             elif CnD is True:
-                                #Configuration_Data = Parse_Inputs(s)
+                                logger.debug("Configuration_Data string found...Configuration_Data string getting parsed...\n")
+                                Configuration_Data_str = s
+                                Configuration_Data = Parse_Inputs(s)
+                                logger.debug("Parse success\n")
                                 pass
                             elif CaD is True:
-                                #logger.debug("Calibration_Data string found...\Calibration_Data string getting parsed...\n")
+                                #logger.debug("Calibration_Data string found...Calibration_Data string getting parsed...\n")
                                 Calibration_Data_str = s
                                 #Calibration_Data = Parse_Inputs(s)
                                 #logger.debug("Parse success\n")
                                 pass
                             elif InD is True:
-                                logger.debug("Input_Data string found...\Input_Data string getting parsed...\n")
+                                logger.debug("Input_Data string found...Input_Data string getting parsed...\n")
                                 Input_Data_str = s
                                 Input_Data = Parse_Inputs(s)
                                 logger.debug("Parse success\n")
                                 pass
                             elif OpD is True:
-                                #logger.debug("Data_Definition string found...\Data_Definition string getting parsed...\n")
+                                #logger.debug("Data_Definition string found...Data_Definition string getting parsed...\n")
                                 Data_Definition_str = s
                                 #Data_Definition = Parse_Inputs(s)
                                 #logger.debug("Parse success\n")
@@ -486,6 +548,8 @@ def spec_parser(specpath,pp_folder_path):
                 logger.debug("Input_Data_str : {} \n".format(Input_Data_str))
             if CaD is True:
                 logger.debug("Calibration_Data_str : {} \n".format(Calibration_Data_str))
+            if CnD is True:
+                logger.debug("Configuration_Data_str : {} \n".format(Configuration_Data_str))
             if ImA is True:
                 logger.debug("Import_Actions_str : {} \n".format(Import_Actions_str))
 
@@ -499,11 +563,7 @@ def spec_parser(specpath,pp_folder_path):
                     logger.debug("Identified as {}..\n".format(dt))
                     logger.debug("Creating declaration..\n")
                     if data.name.startswith('NC') or data.name.startswith('NLC'):
-                        if data.name.find('[')>-1:
-                            name = data.name[0:data.name.find('[')].strip()+'(i)'
-                        else:
-                            name = data.name.strip()
-                        list_of_NC_to_fetch_frmPP.append(name)
+                        pass
                     elif data.name.startswith('LV_'):
                         if data.name.find('[')>-1:
                             name = data.name[0:data.name.find('[')].lower()+data.name[data.name.find('['):]
@@ -563,13 +623,13 @@ def spec_parser(specpath,pp_folder_path):
                     logger.debug("Import_Actions : {}".format(Import_Actions))
                     for actions_1 in Import_Actions:
                         if actions_1 in actions_dict:
-                            if len(actions_dict[actions_1])>1:
-                                comment = "/*Warning : {} declarations available. Choose one by commenting others*/\n".format(len(actions_dict[actions_1]))
+                            if len(set(actions_dict[actions_1]))>1:
+                                comment = "/*Warning : {} declarations available. Choose one by commenting others*/\n".format(len(set(actions_dict[actions_1])))
                                 wfh.write(comment)
-                                for defs in actions_dict[actions_1]:
+                                for defs in set(actions_dict[actions_1]):
                                     wfh.write(defs)
                             else:
-                                for defs in actions_dict[actions_1]:
+                                for defs in set(actions_dict[actions_1]):
                                     wfh.write(defs)
                         else:
                             comment = "/*Info : Import Action '{}' does not exist in PIS. Please create a stub here*/\n".format(actions_1)
@@ -618,14 +678,15 @@ def copy_grls(entry3):
 def collect_nc_data_n_actions(specpath,base_path,pp_folder_path):
     global work_folder_path
     global logger
-    global work_folders
+    work_folders = ['asw','bsw','aggr']
     work_folder_path = os.path.join(base_path,'work')
+    if os.path.isdir(os.path.join(work_folder_path,'app')):
+        work_folders.append('app')
     logger.info(",Proceeding to collect ACTIONS\n")
     with open(os.path.join(pp_folder_path,'all_actions.h'), "w") as wfh_var:
         wfh_var.write('#ifndef ALL_ACTIONS_H\n')
         wfh_var.write('#define ALL_ACTIONS_H\n')
         #collecting actions
-        work_folder_path = os.path.join(base_path,'work')
         for dirss in work_folders:
             logger.debug("Scanning directory {} for action prototypes...".format(dirss))
             action_folder_path = os.path.join(work_folder_path,dirss)
@@ -680,7 +741,7 @@ def create_dummy_files(filepath,pp_folder_path,path_for_CI_folder):
                 namelist.append(name)
         finallist = set(namelist)
         path_split = str(filepath).split('\\')
-        module_name = path_split[-1].rstrip('.c')
+        module_name = path_split[-1].replace('.c','')
         imfile = module_name+'_im.h'
         if imfile in finallist:
             logger.debug("module import header found...")
